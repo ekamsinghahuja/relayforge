@@ -28,7 +28,7 @@ public class WebhookEndpointController {
             @Valid @RequestBody CreateEndpointRequest request) {
         return service.registerEndpoint(
                 request.url(),
-                request.description(), request.signingEnabled(), request.signingSecret());
+                request.name(), request.description(), Boolean.TRUE.equals(request.signingEnabled()), request.signingSecret());
     }
 
     @GetMapping
@@ -59,8 +59,9 @@ public class WebhookEndpointController {
 
     public record CreateEndpointRequest(
             @NotBlank @Size(max = 2048) String url,
+            @Size(max = 255) String name,
             @Size(max = 255) String description,
-            boolean signingEnabled,
+            Boolean signingEnabled,
             @Size(max = 4096) String signingSecret) {
     }
 }

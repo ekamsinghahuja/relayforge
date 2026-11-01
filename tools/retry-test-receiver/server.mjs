@@ -1,10 +1,15 @@
 import { createServer } from 'node:http';
 
-const host = '127.0.0.1';
+const host = process.env.RETRY_RECEIVER_HOST ?? '127.0.0.1';
 const port = Number(process.env.RETRY_RECEIVER_PORT ?? 9090);
 const requests = [];
 
 function sendJson(response, status, body) {
+  if ([204, 205, 304].includes(status)) {
+    response.writeHead(status);
+    response.end();
+    return;
+  }
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   response.end(JSON.stringify(body));
 }
@@ -50,7 +55,11 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === 'POST' && ['/accept', '/fail'].includes(url.pathname)) {
+  const statusMatch = url.pathname.match(/^\/status\/(\d{3})$/);
+  const respondsWithStatus = statusMatch ? Number(statusMatch[1]) : null;
+  if (request.method === 'POST'
+      && (url.pathname === '/accept' || url.pathname === '/fail'
+          || (respondsWithStatus !== null && respondsWithStatus >= 200 && respondsWithStatus <= 599))) {
     let body;
     try {
       body = await readJson(request);
@@ -60,7 +69,7 @@ const server = createServer(async (request, response) => {
     }
 
     const attempt = requests.length + 1;
-    const status = url.pathname === '/fail' ? 503 : 200;
+    const status = respondsWithStatus ?? (url.pathname === '/fail' ? 503 : 200);
     const record = {
       attempt,
       receivedAt: new Date().toISOString(),
@@ -87,8 +96,9 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, host, () => {
   console.log(`Retry test receiver listening at http://${host}:${port}`);
-  console.log('Accept endpoint: http://localhost:9090/accept');
-  console.log('Fail endpoint (HTTP 503): http://localhost:9090/fail');
+  console.log(`Accept endpoint: http://${host}:${port}/accept`);
+  console.log(`Fail endpoint (HTTP 503): http://${host}:${port}/fail`);
+  console.log(`Custom response endpoint: http://${host}:${port}/status/<100-599>`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

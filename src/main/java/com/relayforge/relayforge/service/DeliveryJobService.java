@@ -100,11 +100,19 @@ public class DeliveryJobService {
 
     @Transactional
     public boolean retryManually(UUID id) {
-        return jdbcTemplate.update("""
+        List<UUID> eventIds = jdbcTemplate.query("""
+                SELECT event_id FROM webhook_deliveries WHERE id=? AND status='FAILED' FOR UPDATE
+                """, (resultSet, rowNumber) -> resultSet.getObject("event_id", UUID.class), id);
+        if (eventIds.isEmpty()) return false;
+        UUID eventId = eventIds.getFirst();
+        lockEvent(eventId);
+        boolean retried = jdbcTemplate.update("""
                 UPDATE webhook_deliveries SET status='PENDING', attempt_count=0,
                     next_attempt_at=NULL, last_error=NULL, updated_at=CURRENT_TIMESTAMP
                 WHERE id=? AND status='FAILED'
                 """, id) == 1;
+        if (retried) jdbcTemplate.update("UPDATE webhook_events SET status='PENDING' WHERE id=?", eventId);
+        return retried;
     }
 
     private String bounded(String error) {
@@ -139,7 +147,26 @@ public class DeliveryJobService {
                 claim.id(), claim.claimToken()) == 1;
         if (completed && status != null && !"CANCELLED".equals(status))
             finishAttempt(claim.id(), responseStatus, status, boundedError);
+        if (completed) refreshEventStatus(claim.id());
         return completed;
+    }
+
+    private void refreshEventStatus(UUID deliveryId) {
+        UUID eventId = jdbcTemplate.queryForObject(
+                "SELECT event_id FROM webhook_deliveries WHERE id=?", UUID.class, deliveryId);
+        lockEvent(eventId);
+        Integer outstanding = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM webhook_deliveries
+                WHERE event_id=? AND status IN ('PENDING', 'PROCESSING', 'RETRY_WAIT')
+                """, Integer.class, eventId);
+        if (outstanding == 0) {
+            jdbcTemplate.update("UPDATE webhook_events SET status='DONE' WHERE id=?", eventId);
+        }
+    }
+
+    private void lockEvent(UUID eventId) {
+        jdbcTemplate.queryForObject("SELECT id FROM webhook_events WHERE id=? FOR UPDATE",
+                UUID.class, eventId);
     }
 
     public record ClaimedDelivery(UUID id, UUID claimToken) {

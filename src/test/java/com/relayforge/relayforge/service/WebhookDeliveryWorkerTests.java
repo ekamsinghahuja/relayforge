@@ -72,6 +72,31 @@ class WebhookDeliveryWorkerTests {
     }
 
     @Test
+    void rateLimitedResponseSchedulesRetry() throws Exception {
+        Fixture fixture = fixture(true);
+        when(jobService.claimReadyDeliveries()).thenReturn(List.of(fixture.claim()));
+        when(httpSender.postJson(any(), any(), any(), any(), any())).thenReturn(429);
+
+        worker.poll();
+
+        verify(jobService).scheduleRetry(fixture.claim(), 429,
+                "Receiver returned HTTP 429", 60);
+    }
+
+    @Test
+    void clientErrorResponseFailsWithoutRetry() throws Exception {
+        Fixture fixture = fixture(true);
+        when(jobService.claimReadyDeliveries()).thenReturn(List.of(fixture.claim()));
+        when(httpSender.postJson(any(), any(), any(), any(), any())).thenReturn(400);
+
+        worker.poll();
+
+        verify(jobService).complete(fixture.claim(), "FAILED", 400,
+                "Receiver returned HTTP 400");
+        verify(jobService, never()).scheduleRetry(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
     void connectionFailureMarksDeliveryFailed() throws Exception {
         Fixture fixture = fixture(true);
         when(jobService.claimReadyDeliveries()).thenReturn(List.of(fixture.claim()));

@@ -6,7 +6,11 @@ export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const environment = readEnvironment(request.cookies.get(ENVIRONMENT_COOKIE)?.value);
-  if (!environment) return NextResponse.json({ configured: false });
+  if (!environment) return NextResponse.json({
+    configured: false,
+    defaultName: process.env.RELAYFORGE_DEFAULT_WORKSPACE_NAME,
+    defaultServerUrl: process.env.RELAYFORGE_DEFAULT_API_URL,
+  });
   return NextResponse.json({ configured: true, name: environment.name, serverUrl: environment.serverUrl, hasApiKey: Boolean(environment.apiKey) });
 }
 

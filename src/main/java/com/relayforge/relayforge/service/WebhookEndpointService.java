@@ -27,7 +27,7 @@ public class WebhookEndpointService {
 
     @Transactional
     public EndpointResponse registerEndpoint(
-            String url, String description, boolean signingEnabled, String signingSecret) {
+            String url, String name, String description, boolean signingEnabled, String signingSecret) {
 
         URI uri;
         try {
@@ -52,6 +52,7 @@ public class WebhookEndpointService {
         WebhookEndpoint endpoint = new WebhookEndpoint();
         endpoint.setId(UUID.randomUUID());
         endpoint.setUrl(url);
+        endpoint.setName(name == null || name.isBlank() ? fallbackName(uri) : name.trim());
         endpoint.setDescription(description);
         endpoint.setActive(true);
         endpoint.setCreatedAt(OffsetDateTime.now());
@@ -65,7 +66,7 @@ public class WebhookEndpointService {
         return toResponse(repository.save(endpoint));
     }
 
-    public EndpointResponse registerEndpoint(String url, String description) { return registerEndpoint(url,description,false,null); }
+    public EndpointResponse registerEndpoint(String url, String description) { return registerEndpoint(url,null,description,false,null); }
 
     public List<EndpointResponse> getAllEndpoints() {
         return repository.findAll().stream().map(this::toResponse).toList();
@@ -86,8 +87,13 @@ public class WebhookEndpointService {
     }
 
     private EndpointResponse toResponse(WebhookEndpoint endpoint) {
-        return new EndpointResponse(endpoint.getId(), endpoint.getUrl(), endpoint.getDescription(), endpoint.isActive(), endpoint.getCreatedAt(), endpoint.getUpdatedAt(), endpoint.isSigningEnabled());
+        return new EndpointResponse(endpoint.getId(), endpoint.getUrl(), endpoint.getName(), endpoint.getDescription(), endpoint.isActive(), endpoint.getCreatedAt(), endpoint.getUpdatedAt(), endpoint.isSigningEnabled());
     }
 
-    public record EndpointResponse(UUID id, String url, String description, boolean active, OffsetDateTime createdAt, OffsetDateTime updatedAt, boolean signingEnabled) {}
+    private String fallbackName(URI uri) {
+        String host = uri.getHost();
+        return host != null && !host.isBlank() ? host : uri.toString().substring(0, Math.min(255, uri.toString().length()));
+    }
+
+    public record EndpointResponse(UUID id, String url, String name, String description, boolean active, OffsetDateTime createdAt, OffsetDateTime updatedAt, boolean signingEnabled) {}
 }

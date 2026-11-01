@@ -13,7 +13,11 @@ flowchart LR
 
 Requires Java 21, Maven wrapper, and Docker Compose. Start PostgreSQL and pgAdmin with `docker compose up -d postgres pgadmin`, then run `./mvnw spring-boot:run`. The database is available at `localhost:5432`; pgAdmin is at `http://localhost:5050`. Development database credentials are defined in `compose.yaml` and can be overridden for the application with `DATABASE_URL`, `DATABASE_USERNAME`, and `DATABASE_PASSWORD`. Set production secrets outside tracked files.
 
-Flyway applies migrations automatically at startup. The current schema includes V1–V7; never edit an applied migration, add the next version instead.
+Flyway applies migrations automatically at startup. The current schema includes V1–V10; never edit an applied migration, add the next version instead.
+
+## Full local test stack
+
+The one-command local stack runs PostgreSQL, the Spring API, Console, and controllable test receiver in Docker. Use `./rf up`, then open `http://localhost:3000`; run Java unit/API tests with `./mvnw test` and Robot Framework acceptance tests with `./rf test all`. Inspect captured requests with `./rf receiver requests`, ask the receiver to return another status with `./rf receiver status 429`, and stop containers with `./rf down`. See [the automation guide](tools/robot/README.md) for all commands. `./rf down` preserves the database volume.
 
 ## API
 
@@ -45,7 +49,7 @@ curl http://localhost:8080/api/v1/dashboard/summary
 
 Event types match exactly. Subscription changes affect newly created events; existing delivery jobs remain. Event creation and the initial delivery set are transactional. Optional idempotency keys are unique; reusing a key with different event input returns 409. Delivery is at least once: a receiver may have accepted a request before the worker loses its lease, so receivers should deduplicate by `X-RelayForge-Delivery` when available.
 
-Delivery states are PENDING, PROCESSING, RETRY_WAIT, DELIVERED, FAILED, and CANCELLED. Retryable outcomes are connection/timeouts, HTTP 408, 429 and 5xx; other HTTP statuses fail permanently. `RELAYFORGE_MAX_ATTEMPTS`, `RELAYFORGE_INITIAL_BACKOFF_MS`, and `RELAYFORGE_MAX_BACKOFF_MS` configure bounded exponential backoff. Manual retry resets the current run's attempt counter to zero; prior attempt rows remain as the lifetime audit.
+Delivery states are PENDING, PROCESSING, RETRY_WAIT, DELIVERED, FAILED, and CANCELLED. Event status is PENDING while any delivery is pending, processing, or waiting for retry; it becomes DONE when all delivery jobs are terminal, including when an event has no matching active endpoints. Retryable outcomes are connection/timeouts, HTTP 408, 429 and 5xx; other HTTP statuses fail permanently. Manual retry resets the event to PENDING until its deliveries finish again.
 
 To enable endpoint signing, set `RELAYFORGE_ENCRYPTION_KEY` to the base64 encoding of a random 32-byte AES key, then register an endpoint with `{"signingEnabled":true,"signingSecret":"..."}`. The secret is encrypted with AES-256-GCM at rest and omitted from API responses. Signed requests include event and delivery UUID headers, `X-RelayForge-Timestamp` (Unix seconds), and `X-RelayForge-Signature: sha256=<hex>`. Verify HMAC-SHA256 over the UTF-8 bytes of `<timestamp>.<raw request body>` using the endpoint secret; compare signatures in constant time and reject old timestamps to limit replays. A new encryption key cannot decrypt secrets encrypted with a previous key; rotate by updating secrets before removing the old key.
 

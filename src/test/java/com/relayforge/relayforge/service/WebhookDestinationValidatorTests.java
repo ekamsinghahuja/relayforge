@@ -75,6 +75,33 @@ class WebhookDestinationValidatorTests {
     }
 
     @Test
+    void allowsComposeReceiverAndPublishedLocalReceiverStatusPaths() throws Exception {
+        WebhookDestinationValidator validator = new WebhookDestinationValidator(
+                host -> new InetAddress[]{InetAddress.getByName("127.0.0.1")}, true);
+
+        assertEquals(URI.create("http://receiver:9090/status/429"),
+                validator.validate("http://receiver:9090/status/429"));
+        assertEquals(URI.create("http://localhost:9091/status/503"),
+                validator.validate("http://localhost:9091/status/503"));
+    }
+
+    @Test
+    void localTestReceiverAllowlistRejectsOtherHostsPortsSchemesAndPaths() throws Exception {
+        WebhookDestinationValidator validator = new WebhookDestinationValidator(
+                host -> new InetAddress[]{InetAddress.getByName("127.0.0.1")}, true);
+
+        for (String url : Arrays.asList(
+                "http://receiver:8080/accept",
+                "https://receiver:9090/accept",
+                "http://localhost:9091/admin",
+                "http://127.0.0.1:9091/accept",
+                "http://receiver:9090/status/600",
+                "http://receiver:9090/accept#fragment")) {
+            assertThrows(IllegalArgumentException.class, () -> validator.validate(url), url);
+        }
+    }
+
+    @Test
     void localTestReceiverRemainsBlockedByDefault() throws Exception {
         assertThrows(IllegalArgumentException.class,
                 () -> new WebhookDestinationValidator(host -> new InetAddress[]{

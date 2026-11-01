@@ -11,6 +11,7 @@ import com.relayforge.relayforge.repository.WebhookEventRepository;
 import com.relayforge.relayforge.repository.WebhookSubscriptionRepository;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 @Service
 public class WebhookEventService {
+
+    private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final WebhookEventRepository repository;
     private final WebhookEndpointRepository endpointRepository;
@@ -50,7 +53,7 @@ public class WebhookEventService {
             var existing = repository.findByIdempotencyKey(idempotencyKey);
             if (existing.isPresent()) {
                 WebhookEvent event = existing.get();
-                if (!eventType.equals(event.getEventType()) || !payloadString.equals(event.getPayload()))
+                if (!eventType.equals(event.getEventType()) || !samePayload(payload, event.getPayload()))
                     throw new DuplicateEventKeyException("Idempotency-Key was already used with a different request");
                 return toResponse(event);
             }
@@ -69,7 +72,7 @@ public class WebhookEventService {
         catch (DataIntegrityViolationException ex) {
             if (idempotencyKey == null) throw ex;
             WebhookEvent prior = repository.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> ex);
-            if (!eventType.equals(prior.getEventType()) || !payloadString.equals(prior.getPayload()))
+            if (!eventType.equals(prior.getEventType()) || !samePayload(payload, prior.getPayload()))
                 throw new DuplicateEventKeyException("Idempotency-Key was already used with a different request");
             return toResponse(prior);
         }
@@ -84,6 +87,9 @@ public class WebhookEventService {
                         retryIntervals.getOrDefault(endpoint.getId(), 60)))
                 .toList();
         deliveryRepository.saveAll(deliveries);
+        if (deliveries.isEmpty()) {
+            savedEvent.setStatus("DONE");
+        }
 
         return toResponse(savedEvent);
     }
@@ -111,6 +117,14 @@ public class WebhookEventService {
 
     private EventResponse toResponse(WebhookEvent event) {
         return new EventResponse(event.getId(), event.getEventType(), event.getPayload(), event.getStatus(), event.getCreatedAt());
+    }
+
+    private boolean samePayload(JsonNode requestedPayload, String storedPayload) {
+        try {
+            return JSON_MAPPER.readTree(storedPayload).equals(requestedPayload);
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
     @Transactional(readOnly = true)

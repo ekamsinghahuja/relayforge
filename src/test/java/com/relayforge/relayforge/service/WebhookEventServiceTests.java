@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -100,9 +101,52 @@ class WebhookEventServiceTests {
         WebhookEvent event = service.createEvent(
                 "order.created", JsonMapper.builder().build().readTree("{}"));
 
-        assertEquals("PENDING", event.getStatus());
+        assertEquals("DONE", event.getStatus());
         verify(eventRepository).saveAndFlush(any(WebhookEvent.class));
         verify(deliveryRepository).saveAll(List.of());
+    }
+
+    @Test
+    void sameIdempotencyKeyAndJsonPayloadReuseTheEventAfterJsonbFormatting() throws Exception {
+        String eventType = "order.created";
+        String idempotencyKey = "robot-same-request";
+        var payload = JsonMapper.builder().build().readTree("{\"id\":1,\"name\":\"box\"}");
+
+        var first = service.createEvent(eventType, payload, idempotencyKey);
+        WebhookEvent stored = new WebhookEvent();
+        stored.setId(first.id());
+        stored.setEventType(eventType);
+        stored.setPayload("{ \"id\": 1, \"name\": \"box\" }");
+        stored.setStatus(first.status());
+        stored.setCreatedAt(first.createdAt());
+        when(eventRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(java.util.Optional.of(stored));
+
+        var repeated = service.createEvent(eventType, payload, idempotencyKey);
+
+        assertEquals(first.id(), repeated.id());
+        verify(eventRepository, times(1)).saveAndFlush(any(WebhookEvent.class));
+        verify(deliveryRepository, times(1)).saveAll(any(Iterable.class));
+    }
+
+    @Test
+    void reusingIdempotencyKeyWithDifferentJsonContentIsRejected() throws Exception {
+        String eventType = "order.created";
+        String idempotencyKey = "robot-different-request";
+        var originalPayload = JsonMapper.builder().build().readTree("{\"id\":1}");
+        var changedPayload = JsonMapper.builder().build().readTree("{\"id\":2}");
+        var first = service.createEvent(eventType, originalPayload, idempotencyKey);
+        WebhookEvent stored = new WebhookEvent();
+        stored.setId(first.id());
+        stored.setEventType(eventType);
+        stored.setPayload("{ \"id\": 1 }");
+        stored.setStatus(first.status());
+        stored.setCreatedAt(first.createdAt());
+        when(eventRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(java.util.Optional.of(stored));
+
+        assertThrows(com.relayforge.relayforge.common.DuplicateEventKeyException.class,
+                () -> service.createEvent(eventType, changedPayload, idempotencyKey));
     }
 
     @Test

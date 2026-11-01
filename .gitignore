@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Robot Framework local environment and generated reports
+tools/robot/.venv/
+tools/robot/results/
+tools/robot/__pycache__/

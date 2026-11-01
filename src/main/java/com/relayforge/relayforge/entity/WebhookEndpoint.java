@@ -18,6 +18,9 @@ public class WebhookEndpoint {
     @Column(nullable = false, length = 2048)
     private String url;
 
+    @Column(nullable = false, length = 255)
+    private String name;
+
     @Column(length = 255)
     private String description;
 
@@ -44,6 +47,10 @@ public class WebhookEndpoint {
         OffsetDateTime now = OffsetDateTime.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (name == null || name.isBlank()) {
+            name = description == null || description.isBlank() ? url : description;
+            if (name != null && name.length() > 255) name = name.substring(0, 255);
+        }
     }
 
     public UUID getId() {
@@ -61,6 +68,9 @@ public class WebhookEndpoint {
     public void setUrl(String url) {
         this.url = url;
     }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public String getDescription() {
         return description;

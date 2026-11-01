@@ -4,6 +4,7 @@ This dependency-free Node.js server listens only on `127.0.0.1:9090`. Choose its
 
 - `http://localhost:9090/accept` always responds with HTTP 200.
 - `http://localhost:9090/fail` always responds with HTTP 503, which exercises RelayForge's retry policy.
+- `http://localhost:9090/status/429` (or another code from 200 through 599) responds with that status.
 
 ## Run
 
@@ -19,7 +20,9 @@ Start Spring Boot with the local test profile so the endpoint validator permits 
 SPRING_PROFILES_ACTIVE=local-test ./mvnw spring-boot:run
 ```
 
-Keep the profile local; do not enable it in deployed environments.
+The full Docker stack publishes this receiver on `http://localhost:9091` to avoid conflicting with a host-run receiver; inside Compose, the API uses `http://receiver:9090`.
+
+Keep the profile local; do not enable it in deployed environments. In Docker, the receiver URL uses `http://receiver:9090` from the backend network.
 
 ## Inspect captured requests
 

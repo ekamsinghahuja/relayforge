@@ -8,18 +8,86 @@ services:
       POSTGRES_USER: relayforge
       POSTGRES_PASSWORD: relayforge_dev
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - relayforge_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relayforge -d relayforge"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  receiver:
+    build:
+      context: ./tools/retry-test-receiver
+    container_name: relayforge-test-receiver
+    environment:
+      RETRY_RECEIVER_HOST: 0.0.0.0
+      RETRY_RECEIVER_PORT: 9090
+    ports:
+      - "127.0.0.1:9091:9090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: relayforge-api
+    environment:
+      SPRING_PROFILES_ACTIVE: local-test
+      DATABASE_URL: jdbc:postgresql://postgres:5432/relayforge
+      DATABASE_USERNAME: relayforge
+      DATABASE_PASSWORD: relayforge_dev
+      RELAYFORGE_DELIVERY_POLL_INTERVAL_MS: 500
+      RELAYFORGE_MAX_ATTEMPTS: 5
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      receiver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v1/dashboard/summary >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  console:
+    build:
+      context: ./www
+      dockerfile: Dockerfile
+    container_name: relayforge-console
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      RELAYFORGE_DEFAULT_WORKSPACE_NAME: Local Docker
+      RELAYFORGE_DEFAULT_API_URL: http://api:8080
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   pgadmin:
+    profiles: ["admin"]
     image: dpage/pgadmin4:latest
     container_name: relayforge-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ekamsinghahuja123@gmail.com
       PGADMIN_DEFAULT_PASSWORD: admin_dev_password
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:

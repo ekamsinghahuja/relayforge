@@ -16,6 +16,16 @@ export function EnvironmentSetup({ onConnected }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    fetch("/api/environment", { cache: "no-store" })
+      .then(response => response.json())
+      .then((data: { defaultName?: string; defaultServerUrl?: string }) => {
+        if (data.defaultName) setName(data.defaultName);
+        if (data.defaultServerUrl) setServerUrl(data.defaultServerUrl);
+      })
+      .catch(() => {});
+  }, []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {

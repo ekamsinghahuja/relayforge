@@ -1,7 +1,6 @@
 package com.relayforge.relayforge.service;
 
 import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.net.Inet4Address;
@@ -15,7 +14,8 @@ import java.util.Arrays;
 public class WebhookDestinationValidator {
 
     private final AddressResolver addressResolver;
-    private final boolean localTestReceiverEnabled;
+    @Value("${relayforge.test-receiver.enabled:false}")
+    private boolean localTestReceiverEnabled;
 
     public WebhookDestinationValidator() {
         this(InetAddress::getAllByName, false);
@@ -23,12 +23,6 @@ public class WebhookDestinationValidator {
 
     public WebhookDestinationValidator(AddressResolver addressResolver) {
         this(addressResolver, false);
-    }
-
-    @Autowired
-    public WebhookDestinationValidator(
-            @Value("${relayforge.delivery.test-receiver.enabled:false}") boolean localTestReceiverEnabled) {
-        this(InetAddress::getAllByName, localTestReceiverEnabled);
     }
 
     WebhookDestinationValidator(AddressResolver addressResolver, boolean localTestReceiverEnabled) {
@@ -64,11 +58,19 @@ public class WebhookDestinationValidator {
     }
 
     private boolean isLocalTestReceiverUrl(URI uri, String scheme) {
+        String host = uri.getHost();
+        String path = uri.getPath();
+        boolean testReceiverHost = "localhost".equalsIgnoreCase(host)
+                || "receiver".equalsIgnoreCase(host);
+        boolean testReceiverPath = "/accept".equals(path)
+                || "/fail".equals(path)
+                || path != null && path.matches("/status/[1-5][0-9]{2}");
         return localTestReceiverEnabled
                 && "http".equalsIgnoreCase(scheme)
-                && "localhost".equalsIgnoreCase(uri.getHost())
-                && uri.getPort() == 9090
-                && ("/accept".equals(uri.getPath()) || "/fail".equals(uri.getPath()))
+                && testReceiverHost
+                && ("receiver".equalsIgnoreCase(host) && uri.getPort() == 9090
+                    || "localhost".equalsIgnoreCase(host) && (uri.getPort() == 9090 || uri.getPort() == 9091))
+                && testReceiverPath
                 && uri.getRawQuery() == null
                 && uri.getRawFragment() == null;
     }

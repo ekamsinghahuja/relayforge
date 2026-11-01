@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build, unit tests, and acceptance tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: www/package-lock.json
+
+      - name: Start PostgreSQL for Java tests
+        run: docker compose up --detach --wait postgres
+
+      - name: Build backend and run unit tests
+        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+
+      - name: Install Console dependencies
+        working-directory: www
+        run: npm ci
+
+      - name: Type-check and build Console
+        working-directory: www
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Run Robot acceptance tests
+        run: ./rf test all
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            tools/robot/results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop Compose services
+        if: always()
+        run: docker compose down --volumes --remove-orphans

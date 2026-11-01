@@ -1,0 +1,8 @@
+
+CREATE TABLE webhook_endpoints (
+    id UUID PRIMARY KEY,
+    url VARCHAR(2048) NOT NULL,
+    description VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

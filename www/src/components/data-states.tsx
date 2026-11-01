@@ -1,0 +1,6 @@
+import { motion } from "motion/react";
+import { AlertCircle, LoaderCircle, SearchX } from "lucide-react";
+export function LoadingState({label="Loading live data"}:{label?:string}){return <div className="empty-state"><LoaderCircle className="spin" size={20}/><p>{label}</p></div>}
+export function EmptyState({title,description,action,icon}:{title:string;description:string;action?:React.ReactNode;icon?:React.ReactNode}){return <motion.div initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} className="empty-state"><span className="empty-icon">{icon??<SearchX size={18}/>}</span><h3>{title}</h3><p>{description}</p>{action}</motion.div>}
+export function ErrorState({message}:{message:string}){return <div className="error-state"><AlertCircle size={15} style={{verticalAlign:"-3px",marginRight:7}}/>{message}</div>}
+export function Pagination({page,pages,onChange,total}:{page:number;pages:number;onChange:(value:number)=>void;total:number}){return <div className="pagination"><span>{total.toLocaleString()} records <span style={{color:"#586274"}}>·</span> Page {page+1} of {Math.max(1,pages)}</span><span style={{display:"flex",gap:6}}><button disabled={page===0} onClick={()=>onChange(page-1)}>Previous</button><button disabled={page+1>=pages} onClick={()=>onChange(page+1)}>Next</button></span></div>}
